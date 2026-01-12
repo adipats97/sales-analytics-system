@@ -231,6 +231,284 @@ def validate_and_filter(transactions, region=None, min_amount=None, max_amount=N
     return (valid_transactions, invalid_count, filter_summary)
 
 
+def calculate_total_revenue(transactions):
+    """
+    Calculates total revenue from all transactions
+    Returns: float (total revenue)
+    
+    Expected Output: Single number representing sum of (Quantity * UnitPrice)
+    Example: 1545000.50
+    """
+    total_revenue = 0.0
+    
+    for transaction in transactions:
+        try:
+            quantity = transaction.get('Quantity', 0)
+            unit_price = transaction.get('UnitPrice', 0.0)
+            
+            # Ensure quantity and unit_price are numeric
+            if isinstance(quantity, str):
+                quantity = int(float(quantity.replace(',', '')))
+            if isinstance(unit_price, str):
+                unit_price = float(unit_price.replace(',', ''))
+            
+            revenue = quantity * unit_price
+            total_revenue += revenue
+        except (ValueError, TypeError, KeyError):
+            # Skip transactions with invalid data
+            continue
+    
+    return float(total_revenue)
+
+
+def region_wise_sales(transactions):
+    """
+    Analyzes sales by region
+
+    Returns: dictionary with region statistics
+
+    Expected Output Format:
+    {
+        'North': {
+            'total_sales': 450000.0,
+            'transaction_count': 15,
+            'percentage': 29.13
+        },
+        'South': {...},
+        ...
+    }
+
+    Requirements:
+    - Calculate total sales per region
+    - Count transactions per region
+    - Calculate percentage of total sales
+    - Sort by total_sales in descending order
+    """
+    # Calculate total revenue first (for percentage calculation)
+    total_revenue = calculate_total_revenue(transactions)
+    
+    # Initialize region statistics
+    region_stats = {}
+    
+    # Process each transaction
+    for transaction in transactions:
+        try:
+            region = transaction.get('Region', '').strip()
+            if not region:
+                continue
+            
+            quantity = transaction.get('Quantity', 0)
+            unit_price = transaction.get('UnitPrice', 0.0)
+            
+            # Ensure quantity and unit_price are numeric
+            if isinstance(quantity, str):
+                quantity = int(float(quantity.replace(',', '')))
+            if isinstance(unit_price, str):
+                unit_price = float(unit_price.replace(',', ''))
+            
+            sales_amount = quantity * unit_price
+            
+            # Initialize region if not exists
+            if region not in region_stats:
+                region_stats[region] = {
+                    'total_sales': 0.0,
+                    'transaction_count': 0
+                }
+            
+            # Update region statistics
+            region_stats[region]['total_sales'] += sales_amount
+            region_stats[region]['transaction_count'] += 1
+            
+        except (ValueError, TypeError, KeyError):
+            # Skip transactions with invalid data
+            continue
+    
+    # Calculate percentage for each region
+    for region in region_stats:
+        if total_revenue > 0:
+            percentage = (region_stats[region]['total_sales'] / total_revenue) * 100
+            region_stats[region]['percentage'] = round(percentage, 2)
+        else:
+            region_stats[region]['percentage'] = 0.0
+    
+    # Sort by total_sales in descending order
+    # Convert to list of tuples, sort, then convert back to dict
+    sorted_regions = sorted(
+        region_stats.items(),
+        key=lambda x: x[1]['total_sales'],
+        reverse=True
+    )
+    
+    # Create ordered dictionary
+    result = {}
+    for region, stats in sorted_regions:
+        result[region] = stats
+    
+    return result
+
+
+def top_selling_products(transactions, n=5):
+    """
+    Finds top n products by total quantity sold
+    Returns: list of tuples
+    
+    Expected Output Format:
+    [
+        ('Laptop', 45, 2250000.0),  # (ProductName, TotalQuantity, TotalRevenue)
+        ('Mouse', 38, 19000.0),
+        ...
+    ]
+    
+    Requirements:
+    - Aggregate by ProductName
+    - Calculate total quantity sold
+    - Calculate total revenue for each product
+    - Sort by TotalQuantity descending
+    - Return top n products
+    """
+    # Dictionary to aggregate product data
+    product_stats = {}
+    
+    # Process each transaction
+    for transaction in transactions:
+        try:
+            product_name = transaction.get('ProductName', '').strip()
+            if not product_name:
+                continue
+            
+            quantity = transaction.get('Quantity', 0)
+            unit_price = transaction.get('UnitPrice', 0.0)
+            
+            # Ensure quantity and unit_price are numeric
+            if isinstance(quantity, str):
+                quantity = int(float(quantity.replace(',', '')))
+            if isinstance(unit_price, str):
+                unit_price = float(unit_price.replace(',', ''))
+            
+            # Initialize product if not exists
+            if product_name not in product_stats:
+                product_stats[product_name] = {
+                    'total_quantity': 0,
+                    'total_revenue': 0.0
+                }
+            
+            # Aggregate quantities and revenue
+            product_stats[product_name]['total_quantity'] += quantity
+            product_stats[product_name]['total_revenue'] += quantity * unit_price
+            
+        except (ValueError, TypeError, KeyError):
+            # Skip transactions with invalid data
+            continue
+    
+    # Convert to list of tuples: (ProductName, TotalQuantity, TotalRevenue)
+    product_list = []
+    for product_name, stats in product_stats.items():
+        product_list.append((
+            product_name,
+            stats['total_quantity'],
+            stats['total_revenue']
+        ))
+    
+    # Sort by TotalQuantity descending
+    product_list.sort(key=lambda x: x[1], reverse=True)
+    
+    # Return top n products
+    return product_list[:n]
+
+
+def customer_analysis(transactions):
+    """
+    Analyzes customer purchase patterns
+
+    Returns: dictionary of customer statistics
+
+    Expected Output Format:
+    {
+        'C001': {
+            'total_spent': 95000.0,
+            'purchase_count': 3,
+            'avg_order_value': 31666.67,
+            'products_bought': ['Laptop', 'Mouse', 'Keyboard']
+        },
+        'C002': {...},
+        ...
+    }
+
+    Requirements:
+    - Calculate total amount spent per customer
+    - Count number of purchases
+    - Calculate average order value
+    - List unique products bought
+    - Sort by total_spent descending
+    """
+    # Dictionary to store customer statistics
+    customer_stats = {}
+    
+    # Process each transaction
+    for transaction in transactions:
+        try:
+            customer_id = transaction.get('CustomerID', '').strip()
+            if not customer_id:
+                continue
+            
+            quantity = transaction.get('Quantity', 0)
+            unit_price = transaction.get('UnitPrice', 0.0)
+            product_name = transaction.get('ProductName', '').strip()
+            
+            # Ensure quantity and unit_price are numeric
+            if isinstance(quantity, str):
+                quantity = int(float(quantity.replace(',', '')))
+            if isinstance(unit_price, str):
+                unit_price = float(unit_price.replace(',', ''))
+            
+            # Calculate transaction amount
+            transaction_amount = quantity * unit_price
+            
+            # Initialize customer if not exists
+            if customer_id not in customer_stats:
+                customer_stats[customer_id] = {
+                    'total_spent': 0.0,
+                    'purchase_count': 0,
+                    'products_bought': set()  # Use set to track unique products
+                }
+            
+            # Update customer statistics
+            customer_stats[customer_id]['total_spent'] += transaction_amount
+            customer_stats[customer_id]['purchase_count'] += 1
+            if product_name:
+                customer_stats[customer_id]['products_bought'].add(product_name)
+            
+        except (ValueError, TypeError, KeyError):
+            # Skip transactions with invalid data
+            continue
+    
+    # Calculate average order value and convert set to sorted list
+    for customer_id, stats in customer_stats.items():
+        # Calculate average order value
+        if stats['purchase_count'] > 0:
+            stats['avg_order_value'] = round(stats['total_spent'] / stats['purchase_count'], 2)
+        else:
+            stats['avg_order_value'] = 0.0
+        
+        # Convert products_bought set to sorted list
+        stats['products_bought'] = sorted(list(stats['products_bought']))
+    
+    # Sort by total_spent in descending order
+    # Convert to list of tuples, sort, then convert back to dict
+    sorted_customers = sorted(
+        customer_stats.items(),
+        key=lambda x: x[1]['total_spent'],
+        reverse=True
+    )
+    
+    # Create ordered dictionary
+    result = {}
+    for customer_id, stats in sorted_customers:
+        result[customer_id] = stats
+    
+    return result
+
+
 def clean_product_name(product_name: str) -> str:
     """
     Remove commas from product names.
