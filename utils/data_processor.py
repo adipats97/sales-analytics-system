@@ -509,6 +509,176 @@ def customer_analysis(transactions):
     return result
 
 
+def daily_sales_trend(transactions):
+    """
+    Analyzes sales trends by date
+    Returns: dictionary sorted by date
+    
+    Expected Output Format:
+    {
+        '2024-12-01': {
+            'revenue': 125000.0,
+            'transaction_count': 8,
+            'unique_customers': 6
+        },
+        '2024-12-02': {...},
+        ...
+    }
+    
+    Requirements:
+    - Group by date
+    - Calculate daily revenue
+    - Count daily transactions
+    - Count unique customers per day
+    - Sort chronologically
+    """
+    # Dictionary to store daily statistics
+    daily_stats = {}
+    
+    # Process each transaction
+    for transaction in transactions:
+        try:
+            date = transaction.get('Date', '').strip()
+            if not date:
+                continue
+            
+            customer_id = transaction.get('CustomerID', '').strip()
+            quantity = transaction.get('Quantity', 0)
+            unit_price = transaction.get('UnitPrice', 0.0)
+            
+            # Ensure quantity and unit_price are numeric
+            if isinstance(quantity, str):
+                quantity = int(float(quantity.replace(',', '')))
+            if isinstance(unit_price, str):
+                unit_price = float(unit_price.replace(',', ''))
+            
+            # Calculate transaction revenue
+            revenue = quantity * unit_price
+            
+            # Initialize date if not exists
+            if date not in daily_stats:
+                daily_stats[date] = {
+                    'revenue': 0.0,
+                    'transaction_count': 0,
+                    'unique_customers': set()
+                }
+            
+            # Update daily statistics
+            daily_stats[date]['revenue'] += revenue
+            daily_stats[date]['transaction_count'] += 1
+            if customer_id:
+                daily_stats[date]['unique_customers'].add(customer_id)
+            
+        except (ValueError, TypeError, KeyError):
+            # Skip transactions with invalid data
+            continue
+    
+    # Convert set to count and sort chronologically
+    result = {}
+    for date in sorted(daily_stats.keys()):  # Sort chronologically
+        stats = daily_stats[date]
+        result[date] = {
+            'revenue': stats['revenue'],
+            'transaction_count': stats['transaction_count'],
+            'unique_customers': len(stats['unique_customers'])
+        }
+    
+    return result
+
+
+def find_peak_sales_day(transactions):
+    """
+    Identifies the date with highest revenue
+    Returns: tuple (date, revenue, transaction_count)
+    
+    Expected Output Format:
+    ('2024-12-15', 185000.0, 12)
+    """
+    # Use daily_sales_trend to get daily statistics
+    daily_stats = daily_sales_trend(transactions)
+    
+    if not daily_stats:
+        return (None, 0.0, 0)
+    
+    # Find the date with maximum revenue
+    peak_date = max(daily_stats.keys(), key=lambda d: daily_stats[d]['revenue'])
+    peak_stats = daily_stats[peak_date]
+    
+    return (
+        peak_date,
+        peak_stats['revenue'],
+        peak_stats['transaction_count']
+    )
+
+
+def low_performing_products(transactions, threshold=10):
+    """
+    Identifies products with low sales
+
+    Returns: list of tuples
+
+    Expected Output Format:
+    [
+        ('Webcam', 4, 12000.0),  # (ProductName, TotalQuantity, TotalRevenue)
+        ('Headphones', 7, 10500.0),
+        ...
+    ]
+
+    Requirements:
+    - Find products with total quantity < threshold
+    - Include total quantity and revenue
+    - Sort by TotalQuantity ascending
+    """
+    # Dictionary to aggregate product data
+    product_stats = {}
+    
+    # Process each transaction
+    for transaction in transactions:
+        try:
+            product_name = transaction.get('ProductName', '').strip()
+            if not product_name:
+                continue
+            
+            quantity = transaction.get('Quantity', 0)
+            unit_price = transaction.get('UnitPrice', 0.0)
+            
+            # Ensure quantity and unit_price are numeric
+            if isinstance(quantity, str):
+                quantity = int(float(quantity.replace(',', '')))
+            if isinstance(unit_price, str):
+                unit_price = float(unit_price.replace(',', ''))
+            
+            # Initialize product if not exists
+            if product_name not in product_stats:
+                product_stats[product_name] = {
+                    'total_quantity': 0,
+                    'total_revenue': 0.0
+                }
+            
+            # Aggregate quantities and revenue
+            product_stats[product_name]['total_quantity'] += quantity
+            product_stats[product_name]['total_revenue'] += quantity * unit_price
+            
+        except (ValueError, TypeError, KeyError):
+            # Skip transactions with invalid data
+            continue
+    
+    # Filter products with total quantity < threshold
+    low_performers = []
+    for product_name, stats in product_stats.items():
+        if stats['total_quantity'] < threshold:
+            low_performers.append((
+                product_name,
+                stats['total_quantity'],
+                stats['total_revenue']
+            ))
+    
+    # Sort by TotalQuantity ascending
+    low_performers.sort(key=lambda x: x[1])
+    
+    return low_performers
+
+
 def clean_product_name(product_name: str) -> str:
     """
     Remove commas from product names.
