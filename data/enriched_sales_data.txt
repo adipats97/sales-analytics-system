@@ -1,0 +1,2 @@
+TransactionID|Date|ProductID|ProductName|Quantity|UnitPrice|CustomerID|Region|API_Category|API_Brand|API_Rating|API_Match
+T999|2024-12-01|P1|Test Product|1|100.0|C001|North|beauty|Essence|2.56|True
