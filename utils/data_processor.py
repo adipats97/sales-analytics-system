@@ -679,6 +679,219 @@ def low_performing_products(transactions, threshold=10):
     return low_performers
 
 
+def generate_sales_report(transactions, enriched_transactions, output_file='output/sales_report.txt'):
+    """
+    Generates a comprehensive formatted text report
+
+    Report Must Include (in this order):
+
+    1. HEADER
+       - Report title
+       - Generation date and time
+       - Total records processed
+
+    2. OVERALL SUMMARY
+       - Total Revenue (formatted with commas)
+       - Total Transactions
+       - Average Order Value
+       - Date Range of data
+
+    3. REGION-WISE PERFORMANCE
+       - Table showing each region with:
+         * Total Sales Amount
+         * Percentage of Total
+         * Transaction Count
+       - Sorted by sales amount descending
+
+    4. TOP 5 PRODUCTS
+       - Table with columns: Rank, Product Name, Quantity Sold, Revenue
+
+    5. TOP 5 CUSTOMERS
+       - Table with columns: Rank, Customer ID, Total Spent, Order Count
+
+    6. DAILY SALES TREND
+       - Table showing: Date, Revenue, Transactions, Unique Customers
+
+    7. PRODUCT PERFORMANCE ANALYSIS
+       - Best selling day
+       - Low performing products (if any)
+       - Average transaction value per region
+
+    8. API ENRICHMENT SUMMARY
+       - Total products enriched
+       - Success rate percentage
+       - List of products that couldn't be enriched
+    """
+    import os
+    
+    # Create output directory if it doesn't exist
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+    
+    report_lines = []
+    
+    # 1. HEADER
+    report_lines.append("=" * 50)
+    report_lines.append("     SALES ANALYTICS REPORT")
+    report_lines.append(f"  Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    report_lines.append(f"  Records Processed: {len(transactions)}")
+    report_lines.append("=" * 50)
+    report_lines.append("")
+    
+    # 2. OVERALL SUMMARY
+    total_revenue = calculate_total_revenue(transactions)
+    total_transactions = len(transactions)
+    avg_order_value = total_revenue / total_transactions if total_transactions > 0 else 0
+    
+    # Get date range
+    dates = [t.get('Date', '') for t in transactions if t.get('Date')]
+    if dates:
+        min_date = min(dates)
+        max_date = max(dates)
+        date_range = f"{min_date} to {max_date}"
+    else:
+        date_range = "N/A"
+    
+    report_lines.append("OVERALL SUMMARY")
+    report_lines.append("-" * 50)
+    report_lines.append(f"Total Revenue:        ₹{total_revenue:,.2f}")
+    report_lines.append(f"Total Transactions:   {total_transactions}")
+    report_lines.append(f"Average Order Value:  ₹{avg_order_value:,.2f}")
+    report_lines.append(f"Date Range:           {date_range}")
+    report_lines.append("")
+    
+    # 3. REGION-WISE PERFORMANCE
+    region_stats = region_wise_sales(transactions)
+    report_lines.append("REGION-WISE PERFORMANCE")
+    report_lines.append("-" * 50)
+    report_lines.append(f"{'Region':<12} {'Sales':<15} {'% of Total':<12} {'Transactions':<12}")
+    report_lines.append("-" * 50)
+    
+    for region, stats in region_stats.items():
+        sales = stats['total_sales']
+        percentage = stats['percentage']
+        count = stats['transaction_count']
+        report_lines.append(f"{region:<12} ₹{sales:>12,.2f}  {percentage:>6.2f}%      {count:>10}")
+    report_lines.append("")
+    
+    # 4. TOP 5 PRODUCTS
+    top_products = top_selling_products(transactions, n=5)
+    report_lines.append("TOP 5 PRODUCTS")
+    report_lines.append("-" * 50)
+    report_lines.append(f"{'Rank':<6} {'Product Name':<25} {'Quantity Sold':<15} {'Revenue':<15}")
+    report_lines.append("-" * 50)
+    
+    for rank, (product_name, quantity, revenue) in enumerate(top_products, 1):
+        report_lines.append(f"{rank:<6} {product_name:<25} {quantity:>13}      ₹{revenue:>12,.2f}")
+    report_lines.append("")
+    
+    # 5. TOP 5 CUSTOMERS
+    customer_stats = customer_analysis(transactions)
+    top_customers = list(customer_stats.items())[:5]
+    report_lines.append("TOP 5 CUSTOMERS")
+    report_lines.append("-" * 50)
+    report_lines.append(f"{'Rank':<6} {'Customer ID':<15} {'Total Spent':<15} {'Order Count':<12}")
+    report_lines.append("-" * 50)
+    
+    for rank, (customer_id, stats) in enumerate(top_customers, 1):
+        total_spent = stats['total_spent']
+        order_count = stats['purchase_count']
+        report_lines.append(f"{rank:<6} {customer_id:<15} ₹{total_spent:>12,.2f}  {order_count:>10}")
+    report_lines.append("")
+    
+    # 6. DAILY SALES TREND
+    daily_trend = daily_sales_trend(transactions)
+    report_lines.append("DAILY SALES TREND")
+    report_lines.append("-" * 50)
+    report_lines.append(f"{'Date':<12} {'Revenue':<15} {'Transactions':<12} {'Unique Customers':<15}")
+    report_lines.append("-" * 50)
+    
+    # Show first 10 days
+    for date, stats in list(daily_trend.items())[:10]:
+        revenue = stats['revenue']
+        tx_count = stats['transaction_count']
+        customers = stats['unique_customers']
+        report_lines.append(f"{date:<12} ₹{revenue:>12,.2f}  {tx_count:>10}      {customers:>13}")
+    
+    if len(daily_trend) > 10:
+        report_lines.append(f"... and {len(daily_trend) - 10} more days")
+    report_lines.append("")
+    
+    # 7. PRODUCT PERFORMANCE ANALYSIS
+    peak_day = find_peak_sales_day(transactions)
+    low_performers = low_performing_products(transactions, threshold=10)
+    
+    # Calculate average transaction value per region
+    region_avg = {}
+    for region, stats in region_stats.items():
+        if stats['transaction_count'] > 0:
+            region_avg[region] = stats['total_sales'] / stats['transaction_count']
+    
+    report_lines.append("PRODUCT PERFORMANCE ANALYSIS")
+    report_lines.append("-" * 50)
+    report_lines.append(f"Best Selling Day: {peak_day[0]}")
+    report_lines.append(f"  Revenue: ₹{peak_day[1]:,.2f}")
+    report_lines.append(f"  Transactions: {peak_day[2]}")
+    report_lines.append("")
+    
+    if low_performers:
+        report_lines.append("Low Performing Products (Quantity < 10):")
+        for product_name, quantity, revenue in low_performers[:5]:
+            report_lines.append(f"  - {product_name}: {quantity} units, ₹{revenue:,.2f}")
+    else:
+        report_lines.append("Low Performing Products: None")
+    report_lines.append("")
+    
+    report_lines.append("Average Transaction Value per Region:")
+    for region, avg_value in sorted(region_avg.items(), key=lambda x: x[1], reverse=True):
+        report_lines.append(f"  {region}: ₹{avg_value:,.2f}")
+    report_lines.append("")
+    
+    # 8. API ENRICHMENT SUMMARY
+    if enriched_transactions:
+        total_enriched = len(enriched_transactions)
+        successful = sum(1 for t in enriched_transactions if t.get('API_Match') == True)
+        failed = total_enriched - successful
+        success_rate = (successful / total_enriched * 100) if total_enriched > 0 else 0
+        
+        # Get list of products that couldn't be enriched
+        failed_products = set()
+        for t in enriched_transactions:
+            if t.get('API_Match') == False:
+                failed_products.add(t.get('ProductID', 'Unknown'))
+        
+        report_lines.append("API ENRICHMENT SUMMARY")
+        report_lines.append("-" * 50)
+        report_lines.append(f"Total Products Enriched: {total_enriched}")
+        report_lines.append(f"Success Rate: {success_rate:.2f}%")
+        report_lines.append(f"Successfully Enriched: {successful}")
+        report_lines.append(f"Failed to Enrich: {failed}")
+        
+        if failed_products:
+            report_lines.append("")
+            report_lines.append("Products That Couldn't Be Enriched:")
+            for product_id in sorted(failed_products)[:10]:
+                report_lines.append(f"  - {product_id}")
+            if len(failed_products) > 10:
+                report_lines.append(f"  ... and {len(failed_products) - 10} more")
+    else:
+        report_lines.append("API ENRICHMENT SUMMARY")
+        report_lines.append("-" * 50)
+        report_lines.append("No enriched transaction data available")
+    
+    report_lines.append("")
+    report_lines.append("=" * 50)
+    report_lines.append("End of Report")
+    report_lines.append("=" * 50)
+    
+    # Write to file
+    try:
+        with open(output_file, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(report_lines))
+        print(f"✓ Sales report generated successfully: {output_file}")
+    except Exception as e:
+        print(f"✗ Error generating report: {str(e)}")
+
+
 def clean_product_name(product_name: str) -> str:
     """
     Remove commas from product names.
