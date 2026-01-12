@@ -7,6 +7,49 @@ import os
 from typing import List, Optional
 
 
+def read_sales_data(filename):
+    """
+    Reads sales data from file handling encoding issues
+    Returns: list of raw lines (strings)
+    
+    Expected Output Format:
+    ['T001|2024-12-01|P101|Laptop|2|45000|C001|North', ...]
+    
+    Requirements:
+    - Use 'with' statement
+    - Handle different encodings (try 'utf-8', 'latin-1', 'cp1252')
+    - Handle FileNotFoundError with appropriate error message
+    - Skip the header row
+    - Remove empty lines
+    """
+    encodings = ['utf-8', 'latin-1', 'cp1252']
+    
+    for encoding in encodings:
+        try:
+            with open(filename, 'r', encoding=encoding) as file:
+                lines = file.readlines()
+                # Remove header row (first line)
+                if lines:
+                    lines = lines[1:]
+                # Remove empty lines and strip whitespace
+                raw_lines = [line.strip() for line in lines if line.strip()]
+                return raw_lines
+        except UnicodeDecodeError:
+            # Try next encoding
+            continue
+        except FileNotFoundError:
+            print(f"Error: File '{filename}' not found.")
+            return []
+        except Exception as e:
+            # If all encodings fail, try the last one and return empty list
+            if encoding == encodings[-1]:
+                print(f"Error reading file: {e}")
+                return []
+            continue
+    
+    return []
+
+
 def read_file(file_path: str, encoding: str = 'utf-8') -> Optional[List[str]]:
     """
     Read a file with error handling for encoding issues.

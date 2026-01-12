@@ -2,8 +2,233 @@
 Data processor module for cleaning and validating sales data.
 """
 
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 from datetime import datetime
+
+
+def parse_transactions(raw_lines):
+    """
+    Parses raw lines into clean list of dictionaries
+    
+    Returns: list of dictionaries with keys:
+    ['TransactionID', 'Date', 'ProductID', 'ProductName',
+     'Quantity', 'UnitPrice', 'CustomerID', 'Region']
+    
+    Expected Output Format:
+    [
+        {
+            'TransactionID': 'T001',
+            'Date': '2024-12-01',
+            'ProductID': 'P101',
+            'ProductName': 'Laptop',
+            'Quantity': 2,           # int type
+            'UnitPrice': 45000.0,    # float type
+            'CustomerID': 'C001',
+            'Region': 'North'
+        },
+        ...
+    ]
+    
+    Requirements:
+    - Split by pipe delimiter '|'
+    - Handle commas within ProductName (remove or replace)
+    - Remove commas from numeric fields and convert to proper types
+    - Convert Quantity to int
+    - Convert UnitPrice to float
+    - Skip rows with incorrect number of fields
+    """
+    expected_fields = ['TransactionID', 'Date', 'ProductID', 'ProductName', 
+                      'Quantity', 'UnitPrice', 'CustomerID', 'Region']
+    expected_field_count = len(expected_fields)
+    
+    transactions = []
+    
+    for line in raw_lines:
+        # Split by pipe delimiter
+        fields = [field.strip() for field in line.split('|')]
+        
+        # Skip rows with incorrect number of fields
+        if len(fields) != expected_field_count:
+            continue
+        
+        try:
+            # Create transaction dictionary
+            transaction = {}
+            for i, field_name in enumerate(expected_fields):
+                transaction[field_name] = fields[i]
+            
+            # Handle commas within ProductName (remove commas)
+            if 'ProductName' in transaction:
+                transaction['ProductName'] = transaction['ProductName'].replace(',', '')
+            
+            # Remove commas from Quantity and convert to int
+            quantity_str = transaction.get('Quantity', '0').replace(',', '')
+            transaction['Quantity'] = int(float(quantity_str))
+            
+            # Remove commas from UnitPrice and convert to float
+            unit_price_str = transaction.get('UnitPrice', '0').replace(',', '')
+            transaction['UnitPrice'] = float(unit_price_str)
+            
+            transactions.append(transaction)
+        except (ValueError, TypeError):
+            # Skip rows that can't be converted properly
+            continue
+    
+    return transactions
+
+
+def validate_and_filter(transactions, region=None, min_amount=None, max_amount=None):
+    """
+    Validates transactions and applies optional filters
+
+    Parameters:
+    - transactions: list of transaction dictionaries
+    - region: filter by specific region (optional)
+    - min_amount: minimum transaction amount (Quantity * UnitPrice) (optional)
+    - max_amount: maximum transaction amount (optional)
+
+    Returns: tuple (valid_transactions, invalid_count, filter_summary)
+
+    Expected Output Format:
+    (
+        [list of valid filtered transactions],
+        5,  # count of invalid transactions
+        {
+            'total_input': 100,
+            'invalid': 5,
+            'filtered_by_region': 20,
+            'filtered_by_amount': 10,
+            'final_count': 65
+        }
+    )
+
+    Validation Rules:
+    - Quantity must be > 0
+    - UnitPrice must be > 0
+    - All required fields must be present
+    - TransactionID must start with 'T'
+    - ProductID must start with 'P'
+    - CustomerID must start with 'C'
+
+    Filter Display:
+    - Print available regions to user before filtering
+    - Print transaction amount range (min/max) to user
+    - Show count of records after each filter applied
+    """
+    required_fields = ['TransactionID', 'Date', 'ProductID', 'ProductName', 
+                      'Quantity', 'UnitPrice', 'CustomerID', 'Region']
+    
+    total_input = len(transactions)
+    valid_transactions = []
+    invalid_count = 0
+    
+    # Validate transactions
+    for transaction in transactions:
+        is_valid = True
+        
+        # Check all required fields are present
+        for field in required_fields:
+            if field not in transaction or not transaction[field]:
+                is_valid = False
+                break
+        
+        if not is_valid:
+            invalid_count += 1
+            continue
+        
+        # Check TransactionID starts with 'T'
+        transaction_id = str(transaction.get('TransactionID', '')).strip()
+        if not transaction_id.startswith('T'):
+            is_valid = False
+        
+        # Check ProductID starts with 'P'
+        product_id = str(transaction.get('ProductID', '')).strip()
+        if not product_id.startswith('P'):
+            is_valid = False
+        
+        # Check CustomerID starts with 'C'
+        customer_id = str(transaction.get('CustomerID', '')).strip()
+        if not customer_id.startswith('C'):
+            is_valid = False
+        
+        # Check Quantity > 0
+        try:
+            quantity = transaction.get('Quantity', 0)
+            if isinstance(quantity, str):
+                quantity = int(float(quantity.replace(',', '')))
+            if quantity <= 0:
+                is_valid = False
+        except (ValueError, TypeError):
+            is_valid = False
+        
+        # Check UnitPrice > 0
+        try:
+            unit_price = transaction.get('UnitPrice', 0)
+            if isinstance(unit_price, str):
+                unit_price = float(unit_price.replace(',', ''))
+            if unit_price <= 0:
+                is_valid = False
+        except (ValueError, TypeError):
+            is_valid = False
+        
+        if is_valid:
+            valid_transactions.append(transaction)
+        else:
+            invalid_count += 1
+    
+    # Filter Display: Print available regions
+    if valid_transactions:
+        available_regions = sorted(set(t.get('Region', '') for t in valid_transactions if t.get('Region')))
+        print(f"\nAvailable regions: {', '.join(available_regions)}")
+        
+        # Calculate transaction amounts
+        amounts = [t.get('Quantity', 0) * t.get('UnitPrice', 0) for t in valid_transactions]
+        if amounts:
+            min_transaction_amount = min(amounts)
+            max_transaction_amount = max(amounts)
+            print(f"Transaction amount range: ${min_transaction_amount:,.2f} - ${max_transaction_amount:,.2f}")
+    
+    filtered_by_region = 0
+    filtered_by_amount = 0
+    
+    # Apply region filter
+    if region is not None:
+        before_region_filter = len(valid_transactions)
+        valid_transactions = [t for t in valid_transactions if t.get('Region', '').strip() == str(region).strip()]
+        filtered_by_region = before_region_filter - len(valid_transactions)
+        print(f"After region filter ('{region}'): {len(valid_transactions)} records")
+    
+    # Apply amount filters
+    if min_amount is not None or max_amount is not None:
+        before_amount_filter = len(valid_transactions)
+        filtered_transactions = []
+        for t in valid_transactions:
+            amount = t.get('Quantity', 0) * t.get('UnitPrice', 0)
+            if min_amount is not None and amount < min_amount:
+                continue
+            if max_amount is not None and amount > max_amount:
+                continue
+            filtered_transactions.append(t)
+        valid_transactions = filtered_transactions
+        filtered_by_amount = before_amount_filter - len(valid_transactions)
+        filter_msg = []
+        if min_amount is not None:
+            filter_msg.append(f"min=${min_amount:,.2f}")
+        if max_amount is not None:
+            filter_msg.append(f"max=${max_amount:,.2f}")
+        print(f"After amount filter ({', '.join(filter_msg)}): {len(valid_transactions)} records")
+    
+    final_count = len(valid_transactions)
+    
+    filter_summary = {
+        'total_input': total_input,
+        'invalid': invalid_count,
+        'filtered_by_region': filtered_by_region,
+        'filtered_by_amount': filtered_by_amount,
+        'final_count': final_count
+    }
+    
+    return (valid_transactions, invalid_count, filter_summary)
 
 
 def clean_product_name(product_name: str) -> str:
@@ -30,52 +255,6 @@ def clean_numeric_value(value: str) -> float:
         Float value
     """
     return float(value.replace(',', ''))
-
-
-def validate_record(record: Dict[str, str]) -> Tuple[bool, str]:
-    """
-    Validate a sales record according to the cleaning criteria.
-    
-    Args:
-        record: Dictionary containing record fields
-    
-    Returns:
-        Tuple of (is_valid, error_message)
-    """
-    # Check if TransactionID starts with 'T'
-    transaction_id = record.get('TransactionID', '').strip()
-    if not transaction_id.startswith('T'):
-        return False, f"TransactionID '{transaction_id}' does not start with 'T'"
-    
-    # Check if CustomerID is missing or empty
-    customer_id = record.get('CustomerID', '').strip()
-    if not customer_id:
-        return False, "Missing CustomerID"
-    
-    # Check if Region is missing or empty
-    region = record.get('Region', '').strip()
-    if not region:
-        return False, "Missing Region"
-    
-    # Check Quantity
-    try:
-        quantity_str = record.get('Quantity', '').strip()
-        quantity = clean_numeric_value(quantity_str) if ',' in quantity_str else float(quantity_str)
-        if quantity <= 0:
-            return False, f"Quantity ({quantity}) is less than or equal to 0"
-    except (ValueError, AttributeError):
-        return False, f"Invalid Quantity: {record.get('Quantity', '')}"
-    
-    # Check UnitPrice
-    try:
-        unit_price_str = record.get('UnitPrice', '').strip()
-        unit_price = clean_numeric_value(unit_price_str) if ',' in unit_price_str else float(unit_price_str)
-        if unit_price <= 0:
-            return False, f"UnitPrice ({unit_price}) is less than or equal to 0"
-    except (ValueError, AttributeError):
-        return False, f"Invalid UnitPrice: {record.get('UnitPrice', '')}"
-    
-    return True, ""
 
 
 def clean_and_validate_data(raw_lines: List[str]) -> Tuple[List[Dict], List[Dict], int, int]:
