@@ -5,196 +5,266 @@ Orchestrates data reading, cleaning, API integration, analysis, and report gener
 
 import os
 import sys
-from datetime import datetime
-from utils.file_handler import read_file, write_file, ensure_output_directory
-from utils.data_processor import clean_and_validate_data, calculate_sales_statistics
-from utils.api_handler import get_unique_product_ids, fetch_multiple_products
-
-
-def generate_report(valid_records: list, invalid_records: list, statistics: dict, 
-                   product_info: dict = None) -> str:
-    """
-    Generate a comprehensive sales analytics report.
-    
-    Args:
-        valid_records: List of valid sales records
-        invalid_records: List of invalid sales records
-        statistics: Dictionary containing sales statistics
-        product_info: Optional dictionary of product information from API
-    
-    Returns:
-        Formatted report string
-    """
-    report = []
-    report.append("=" * 80)
-    report.append("SALES ANALYTICS REPORT")
-    report.append("=" * 80)
-    report.append(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    report.append("")
-    
-    # Data Cleaning Summary
-    report.append("-" * 80)
-    report.append("DATA CLEANING SUMMARY")
-    report.append("-" * 80)
-    report.append(f"Total records parsed: {len(valid_records) + len(invalid_records)}")
-    report.append(f"Invalid records removed: {len(invalid_records)}")
-    report.append(f"Valid records after cleaning: {len(valid_records)}")
-    report.append("")
-    
-    # Sales Statistics
-    report.append("-" * 80)
-    report.append("SALES STATISTICS")
-    report.append("-" * 80)
-    report.append(f"Total Revenue: ${statistics['total_revenue']:,.2f}")
-    report.append(f"Total Transactions: {statistics['total_transactions']}")
-    report.append(f"Average Transaction Value: ${statistics['average_transaction_value']:,.2f}")
-    report.append("")
-    
-    # Top Performers
-    report.append("-" * 80)
-    report.append("TOP PERFORMERS")
-    report.append("-" * 80)
-    if statistics['top_product']:
-        report.append(f"Top Product by Revenue: {statistics['top_product']['name']} "
-                      f"(${statistics['top_product']['revenue']:,.2f})")
-    if statistics['top_region']:
-        report.append(f"Top Region by Revenue: {statistics['top_region']['name']} "
-                      f"(${statistics['top_region']['revenue']:,.2f})")
-    if statistics['top_customer']:
-        report.append(f"Top Customer by Revenue: {statistics['top_customer']['id']} "
-                      f"(${statistics['top_customer']['revenue']:,.2f})")
-    report.append("")
-    
-    # Product Revenue Breakdown
-    if statistics.get('product_revenue'):
-        report.append("-" * 80)
-        report.append("PRODUCT REVENUE BREAKDOWN")
-        report.append("-" * 80)
-        sorted_products = sorted(statistics['product_revenue'].items(), 
-                                key=lambda x: x[1], reverse=True)
-        for product, revenue in sorted_products[:10]:  # Top 10 products
-            report.append(f"{product}: ${revenue:,.2f}")
-        report.append("")
-    
-    # Region Revenue Breakdown
-    if statistics.get('region_revenue'):
-        report.append("-" * 80)
-        report.append("REGION REVENUE BREAKDOWN")
-        report.append("-" * 80)
-        sorted_regions = sorted(statistics['region_revenue'].items(), 
-                               key=lambda x: x[1], reverse=True)
-        for region, revenue in sorted_regions:
-            report.append(f"{region}: ${revenue:,.2f}")
-        report.append("")
-    
-    # Invalid Records Summary
-    if invalid_records:
-        report.append("-" * 80)
-        report.append("INVALID RECORDS SUMMARY")
-        report.append("-" * 80)
-        error_counts = {}
-        for record in invalid_records:
-            error = record.get('Error', 'Unknown error')
-            error_counts[error] = error_counts.get(error, 0) + 1
-        
-        for error, count in error_counts.items():
-            report.append(f"{error}: {count} record(s)")
-        report.append("")
-    
-    # API Integration Status
-    if product_info:
-        report.append("-" * 80)
-        report.append("API INTEGRATION STATUS")
-        report.append("-" * 80)
-        success_count = sum(1 for info in product_info.values() 
-                          if info and info.get('api_status') == 'success')
-        mock_count = sum(1 for info in product_info.values() 
-                        if info and info.get('api_status') == 'mock')
-        error_count = sum(1 for info in product_info.values() 
-                         if info and info.get('api_status') == 'error')
-        
-        report.append(f"Products fetched successfully: {success_count}")
-        report.append(f"Products using mock data: {mock_count}")
-        report.append(f"Products with API errors: {error_count}")
-        report.append("")
-    
-    report.append("=" * 80)
-    
-    return "\n".join(report)
+from utils.file_handler import read_sales_data
+from utils.data_processor import (
+    parse_transactions,
+    validate_and_filter,
+    calculate_total_revenue,
+    region_wise_sales,
+    top_selling_products,
+    customer_analysis,
+    daily_sales_trend,
+    find_peak_sales_day,
+    low_performing_products,
+    generate_sales_report
+)
+from utils.api_handler import (
+    fetch_all_products,
+    create_product_mapping,
+    enrich_sales_data
+)
 
 
 def main():
     """
-    Main function to orchestrate the sales analytics system.
+    Main execution function
+
+    Workflow:
+    1. Print welcome message
+    2. Read sales data file (handle encoding)
+    3. Parse and clean transactions
+    4. Display filter options to user
+       - Show available regions
+       - Show transaction amount range
+       - Ask if user wants to filter (y/n)
+    5. If yes, ask for filter criteria and apply
+    6. Validate transactions
+    7. Display validation summary
+    8. Perform all data analyses (call all functions from Part 2)
+    9. Fetch products from API
+    10. Enrich sales data with API info
+    11. Save enriched data to file
+    12. Generate comprehensive report
+    13. Print success message with file locations
+
+    Error Handling:
+    - Wrap entire process in try-except
+    - Display user-friendly error messages
+    - Don't let program crash on errors
     """
-    # File paths
-    data_file = os.path.join('data', 'sales_data.txt')
-    output_dir = 'output'
-    output_file = os.path.join(output_dir, 'sales_report.txt')
-    
-    print("Sales Analytics System")
-    print("=" * 80)
-    print()
-    
-    # Step 1: Read the sales data file
-    print("Step 1: Reading sales data file...")
-    raw_lines = read_file(data_file)
-    
-    if raw_lines is None:
-        print("Error: Could not read sales data file.")
+    try:
+        # Welcome message
+        print("=" * 40)
+        print("SALES ANALYTICS SYSTEM")
+        print("=" * 40)
+        print()
+        
+        # Step 1: Read sales data file
+        print("[1/10] Reading sales data...")
+        try:
+            raw_lines = read_sales_data('data/sales_data.txt')
+            if not raw_lines:
+                print("✗ Error: No data read from file")
+                return
+            print(f"✓ Successfully read {len(raw_lines)} transactions")
+        except Exception as e:
+            print(f"✗ Error reading sales data: {str(e)}")
+            return
+        print()
+        
+        # Step 2: Parse and clean transactions
+        print("[2/10] Parsing and cleaning data...")
+        try:
+            transactions = parse_transactions(raw_lines)
+            if not transactions:
+                print("✗ Error: No transactions parsed")
+                return
+            print(f"✓ Parsed {len(transactions)} records")
+        except Exception as e:
+            print(f"✗ Error parsing transactions: {str(e)}")
+            return
+        print()
+        
+        # Step 3: Display filter options
+        print("[3/10] Filter Options Available:")
+        try:
+            # Get available regions and amount range from transactions
+            regions = sorted(set(t.get('Region', '') for t in transactions if t.get('Region')))
+            amounts = [t.get('Quantity', 0) * t.get('UnitPrice', 0) for t in transactions 
+                      if isinstance(t.get('Quantity'), (int, float)) and isinstance(t.get('UnitPrice'), (int, float))]
+            
+            if amounts:
+                min_amount = min(amounts)
+                max_amount = max(amounts)
+                print(f"Regions: {', '.join(regions)}")
+                print(f"Amount Range: ₹{min_amount:,.2f} - ₹{max_amount:,.2f}")
+            else:
+                print(f"Regions: {', '.join(regions)}")
+                print("Amount Range: N/A")
+        except Exception as e:
+            print(f"✗ Error getting filter options: {str(e)}")
+            regions = []
+            amounts = []
+        
+        print()
+        filter_choice = input("Do you want to filter data? (y/n): ").strip().lower()
+        print()
+        
+        # Step 4: Apply filters if requested
+        region_filter = None
+        min_amount_filter = None
+        max_amount_filter = None
+        
+        if filter_choice == 'y':
+            try:
+                # Ask for region filter
+                if regions:
+                    region_input = input(f"Enter region to filter (or press Enter to skip): ").strip()
+                    if region_input and region_input in regions:
+                        region_filter = region_input
+                
+                # Ask for amount filters
+                min_input = input("Enter minimum amount (or press Enter to skip): ").strip()
+                if min_input:
+                    try:
+                        min_amount_filter = float(min_input)
+                    except ValueError:
+                        print("Invalid minimum amount, skipping...")
+                
+                max_input = input("Enter maximum amount (or press Enter to skip): ").strip()
+                if max_input:
+                    try:
+                        max_amount_filter = float(max_input)
+                    except ValueError:
+                        print("Invalid maximum amount, skipping...")
+                
+                print()
+            except Exception as e:
+                print(f"✗ Error getting filter input: {str(e)}")
+                print("Continuing without filters...")
+                print()
+        else:
+            print()
+        
+        # Step 5: Validate transactions
+        print("[4/10] Validating transactions...")
+        try:
+            if filter_choice == 'y' and (region_filter or min_amount_filter is not None or max_amount_filter is not None):
+                valid_transactions, invalid_count, filter_summary = validate_and_filter(
+                    transactions,
+                    region=region_filter,
+                    min_amount=min_amount_filter,
+                    max_amount=max_amount_filter
+                )
+            else:
+                valid_transactions, invalid_count, filter_summary = validate_and_filter(transactions)
+            
+            print(f"✓ Valid: {len(valid_transactions)} | Invalid: {invalid_count}")
+        except Exception as e:
+            print(f"✗ Error validating transactions: {str(e)}")
+            # Continue with all transactions if validation fails
+            valid_transactions = transactions
+            invalid_count = 0
+        print()
+        
+        # Step 6: Perform all data analyses
+        print("[5/10] Analyzing sales data...")
+        try:
+            # Call all analysis functions (they don't need to be stored, just called)
+            total_revenue = calculate_total_revenue(valid_transactions)
+            region_stats = region_wise_sales(valid_transactions)
+            top_products = top_selling_products(valid_transactions, n=5)
+            customer_stats = customer_analysis(valid_transactions)
+            daily_trend = daily_sales_trend(valid_transactions)
+            peak_day = find_peak_sales_day(valid_transactions)
+            low_performers = low_performing_products(valid_transactions, threshold=10)
+            
+            print("✓ Analysis complete")
+        except Exception as e:
+            print(f"✗ Error during analysis: {str(e)}")
+        print()
+        
+        # Step 7: Fetch products from API
+        print("[6/10] Fetching product data from API...")
+        try:
+            api_products = fetch_all_products()
+            if api_products:
+                print(f"✓ Fetched {len(api_products)} products")
+            else:
+                print("✗ No products fetched from API")
+                api_products = []
+        except Exception as e:
+            print(f"✗ Error fetching products: {str(e)}")
+            api_products = []
+        print()
+        
+        # Step 8: Enrich sales data
+        print("[7/10] Enriching sales data...")
+        enriched_transactions = []
+        try:
+            if api_products:
+                product_mapping = create_product_mapping(api_products)
+                enriched_transactions = enrich_sales_data(valid_transactions, product_mapping)
+                
+                # Calculate enrichment stats
+                total_enriched = len(enriched_transactions)
+                successful = sum(1 for t in enriched_transactions if t.get('API_Match') == True)
+                success_rate = (successful / total_enriched * 100) if total_enriched > 0 else 0
+                print(f"✓ Enriched {successful}/{total_enriched} transactions ({success_rate:.1f}%)")
+            else:
+                print("✗ Skipping enrichment (no API products available)")
+                enriched_transactions = valid_transactions
+        except Exception as e:
+            print(f"✗ Error enriching data: {str(e)}")
+            enriched_transactions = valid_transactions
+        print()
+        
+        # Step 9: Save enriched data (already done in enrich_sales_data, but confirm)
+        print("[8/10] Saving enriched data...")
+        try:
+            enriched_file = 'data/enriched_sales_data.txt'
+            if os.path.exists(enriched_file):
+                print(f"✓ Saved to: {enriched_file}")
+            else:
+                print("✗ Enriched data file not found")
+        except Exception as e:
+            print(f"✗ Error checking enriched data file: {str(e)}")
+        print()
+        
+        # Step 10: Generate comprehensive report
+        print("[9/10] Generating report...")
+        try:
+            report_file = 'output/sales_report.txt'
+            generate_sales_report(valid_transactions, enriched_transactions, report_file)
+            if os.path.exists(report_file):
+                print(f"✓ Report saved to: {report_file}")
+            else:
+                print("✗ Report file not found")
+        except Exception as e:
+            print(f"✗ Error generating report: {str(e)}")
+        print()
+        
+        # Step 11: Success message
+        print("[10/10] Process Complete!")
+        print("=" * 40)
+        print()
+        print("Generated Files:")
+        if os.path.exists('data/enriched_sales_data.txt'):
+            print(f"  - data/enriched_sales_data.txt")
+        if os.path.exists('output/sales_report.txt'):
+            print(f"  - output/sales_report.txt")
+        print()
+        print("=" * 40)
+        
+    except KeyboardInterrupt:
+        print("\n\n✗ Process interrupted by user")
         sys.exit(1)
-    
-    print(f"Successfully read {len(raw_lines)} lines from file.")
-    print()
-    
-    # Step 2: Clean and validate data
-    print("Step 2: Cleaning and validating data...")
-    valid_records, invalid_records, total_parsed, invalid_count = clean_and_validate_data(raw_lines)
-    
-    print(f"Total records parsed: {total_parsed}")
-    print(f"Invalid records removed: {invalid_count}")
-    print(f"Valid records after cleaning: {len(valid_records)}")
-    print()
-    
-    # Step 3: Fetch product information from API
-    print("Step 3: Fetching product information from API...")
-    unique_product_ids = get_unique_product_ids(valid_records)
-    print(f"Found {len(unique_product_ids)} unique products.")
-    
-    # Fetch product info (using mock API for demonstration)
-    product_info = fetch_multiple_products(unique_product_ids[:5])  # Limit to 5 for demo
-    print(f"Fetched information for {len(product_info)} products.")
-    print()
-    
-    # Step 4: Calculate sales statistics
-    print("Step 4: Calculating sales statistics...")
-    statistics = calculate_sales_statistics(valid_records)
-    print("Statistics calculated successfully.")
-    print()
-    
-    # Step 5: Generate report
-    print("Step 5: Generating comprehensive report...")
-    report = generate_report(valid_records, invalid_records, statistics, product_info)
-    
-    # Step 6: Save report to file
-    print("Step 6: Saving report to file...")
-    ensure_output_directory(output_dir)
-    
-    if write_file(output_file, report):
-        print(f"Report saved successfully to: {output_file}")
-    else:
-        print("Error: Could not save report to file.")
-    
-    # Also print report to console
-    print()
-    print(report)
-    
-    print()
-    print("=" * 80)
-    print("Sales Analytics System completed successfully!")
-    print("=" * 80)
+    except Exception as e:
+        print(f"\n✗ Unexpected error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 
 
 if __name__ == "__main__":
     main()
-
