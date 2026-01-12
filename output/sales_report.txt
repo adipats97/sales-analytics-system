@@ -1,0 +1,68 @@
+================================================================================
+SALES ANALYTICS REPORT
+================================================================================
+Generated on: 2026-01-12 19:08:10
+
+--------------------------------------------------------------------------------
+DATA CLEANING SUMMARY
+--------------------------------------------------------------------------------
+Total records parsed: 80
+Invalid records removed: 10
+Valid records after cleaning: 70
+
+--------------------------------------------------------------------------------
+SALES STATISTICS
+--------------------------------------------------------------------------------
+Total Revenue: $3,527,808.00
+Total Transactions: 70
+Average Transaction Value: $50,397.26
+
+--------------------------------------------------------------------------------
+TOP PERFORMERS
+--------------------------------------------------------------------------------
+Top Product by Revenue: LaptopPremium ($2,069,871.00)
+Top Region by Revenue: North ($1,321,605.00)
+Top Customer by Revenue: C004 ($857,124.00)
+
+--------------------------------------------------------------------------------
+PRODUCT REVENUE BREAKDOWN
+--------------------------------------------------------------------------------
+LaptopPremium: $2,069,871.00
+Monitor: $493,759.00
+Laptop: $184,329.00
+MonitorLED: $132,104.00
+Webcam: $128,187.00
+External Hard Drive1TB: $103,227.00
+Headphones: $102,422.00
+External Hard Drive: $60,210.00
+Laptop Charger: $55,556.00
+Wireless Mouse: $49,981.00
+
+--------------------------------------------------------------------------------
+REGION REVENUE BREAKDOWN
+--------------------------------------------------------------------------------
+North: $1,321,605.00
+South: $889,332.00
+West: $848,902.00
+East: $467,969.00
+
+--------------------------------------------------------------------------------
+INVALID RECORDS SUMMARY
+--------------------------------------------------------------------------------
+Quantity (0.0) is less than or equal to 0: 2 record(s)
+Missing CustomerID: 2 record(s)
+UnitPrice (-459.0) is less than or equal to 0: 1 record(s)
+UnitPrice (-998.0) is less than or equal to 0: 1 record(s)
+TransactionID 'X2' does not start with 'T': 1 record(s)
+Missing Region: 1 record(s)
+TransactionID 'X611' does not start with 'T': 1 record(s)
+TransactionID 'X395' does not start with 'T': 1 record(s)
+
+--------------------------------------------------------------------------------
+API INTEGRATION STATUS
+--------------------------------------------------------------------------------
+Products fetched successfully: 5
+Products using mock data: 0
+Products with API errors: 0
+
+================================================================================
